@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Local Blog Generator</title>
+  </head>
+  <body>
+    <h1>Local Blog Generator</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul>
+        {% for category, msg in messages %}
+          <li><strong>{{ category }}:</strong> {{ msg }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <form action="/generate" method="post">
+      <label>Topic:<br /><input type="text" name="topic" size="60" /></label><br /><br />
+      <label>Provider:<br />
+        <select name="provider">
+          <option value="cohere">Cohere</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </label><br /><br />
+      <button type="submit">Generate</button>
+    </form>
+  </body>
+</html>
