@@ -47,6 +47,24 @@ def _extract_cohere_text(response) -> str:
     return str(response)
 
 
+def _format_gemini_error(error: Exception) -> str:
+    message = str(error)
+    lowered = message.lower()
+
+    if (
+        "resource_exhausted" in lowered
+        or "quota exceeded" in lowered
+        or "429" in lowered
+        or "rate limit" in lowered
+    ):
+        return "Gemini quota exceeded. Please retry later or check your billing and quota settings."
+
+    if "api key" in lowered or "permission_denied" in lowered or "unauthorized" in lowered:
+        return "Gemini authentication failed. Check that GEMINI_API_KEY is valid and available to the app."
+
+    return f"Gemini generation error: {message}"
+
+
 def generate_with_cohere(topic: str) -> str:
     try:
         import cohere
@@ -92,7 +110,7 @@ def generate_with_gemini(topic: str) -> str:
                 return text
             return str(out)
         except Exception as exc:
-            raise RuntimeError(f"Gemini generation error: {exc}")
+            raise RuntimeError(_format_gemini_error(exc))
 
     try:
         import google.generativeai as legacy_genai
@@ -101,7 +119,10 @@ def generate_with_gemini(topic: str) -> str:
 
     legacy_genai.configure(api_key=gemini_api_key)
     model = legacy_genai.GenerativeModel("gemini-flash-latest")
-    out = model.generate_content(prompt)
+    try:
+        out = model.generate_content(prompt)
+    except Exception as exc:
+        raise RuntimeError(_format_gemini_error(exc))
     return getattr(out, "text", str(out))
 
 
