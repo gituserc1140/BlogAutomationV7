@@ -4,9 +4,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-COHERE_API_KEY = os.getenv("COHERE_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
 
 def _slugify(title: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
@@ -24,35 +21,52 @@ def _make_prompt(topic: str) -> str:
     )
 
 
+def _get_env_var(name: str) -> str:
+    load_dotenv()
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} not set in environment")
+    return value
+
+
+def _extract_cohere_text(response) -> str:
+    message = getattr(response, "message", None)
+    content = getattr(message, "content", None)
+    if isinstance(content, list):
+        text_parts = [part.text for part in content if hasattr(part, "text") and part.text]
+        if text_parts:
+            return "".join(text_parts)
+
+    if hasattr(response, "response") and isinstance(response.response, dict):
+        out = response.response.get("content") or response.response.get("generations")
+        if isinstance(out, list):
+            return "".join([part.get("text", str(part)) for part in out])
+        if out:
+            return str(out)
+
+    return str(response)
+
+
 def generate_with_cohere(topic: str) -> str:
     try:
         import cohere
     except Exception:
         raise RuntimeError("Cohere client not installed")
 
-    if not COHERE_API_KEY:
-        raise RuntimeError("COHERE_API_KEY not set in environment")
+    cohere_api_key = _get_env_var("COHERE_API_KEY")
 
     # Prefer the new ClientV2 chat API. Fall back if unavailable.
     prompt = _make_prompt(topic)
     try:
         # Cohere v5+ exposes ClientV2 for chat-style API
-        client = cohere.ClientV2(api_key=COHERE_API_KEY)
+        client = cohere.ClientV2(api_key=cohere_api_key)
         messages = [{"role": "user", "content": prompt}]
         # model choice may vary by account; adjust if needed
         resp = client.chat(model="command-a-03-2025", messages=messages)
-        # The API returns a list of content parts; join them if needed
-        if hasattr(resp, "response") and isinstance(resp.response, dict):
-            # Try common shapes
-            out = resp.response.get("content") or resp.response.get("generations")
-            if isinstance(out, list):
-                return "".join([p.get("text", str(p)) for p in out])
-            return str(out)
-        # Fallback to string conversion
-        return str(resp)
+        return _extract_cohere_text(resp)
     except AttributeError:
         # Older cohere packages may not have ClientV2; try legacy client if present
-        client = cohere.Client(COHERE_API_KEY)
+        client = cohere.Client(cohere_api_key)
         resp = client.generate(model="command-xlarge-nightly", prompt=prompt, max_tokens=800)
         return resp.generations[0].text
     except Exception as e:
@@ -61,17 +75,32 @@ def generate_with_cohere(topic: str) -> str:
 
 
 def generate_with_gemini(topic: str) -> str:
-    try:
-        import google.generativeai as genai
-    except Exception:
-        raise RuntimeError("google-generativeai not installed")
-
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY not set in environment")
-
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-flash-latest")
+    gemini_api_key = _get_env_var("GEMINI_API_KEY")
     prompt = _make_prompt(topic)
+
+    try:
+        from google import genai
+    except Exception:
+        genai = None
+
+    if genai is not None:
+        try:
+            client = genai.Client(api_key=gemini_api_key)
+            out = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+            text = getattr(out, "text", "")
+            if text:
+                return text
+            return str(out)
+        except Exception as exc:
+            raise RuntimeError(f"Gemini generation error: {exc}")
+
+    try:
+        import google.generativeai as legacy_genai
+    except Exception:
+        raise RuntimeError("google-genai not installed")
+
+    legacy_genai.configure(api_key=gemini_api_key)
+    model = legacy_genai.GenerativeModel("gemini-flash-latest")
     out = model.generate_content(prompt)
     return getattr(out, "text", str(out))
 

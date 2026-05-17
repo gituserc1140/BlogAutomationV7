@@ -1,6 +1,6 @@
 # Local Blog Generator
 
-Simple local Flask app to generate blog posts using either Cohere or Google Gemini.
+Simple local app to generate blog posts using either Cohere or Google Gemini. The repository now includes both a Flask UI and a Streamlit UI.
 
 Setup
 
@@ -18,10 +18,18 @@ pip install -r requirements.txt
 - `GEMINI_API_KEY` (for Gemini)
 - `FLASK_SECRET` (optional)
 
-3. Run the app:
+3. Run the Flask app:
 
 ```bash
 python app.py
 ```
 
 Open http://localhost:5000 and pick a provider, enter a topic, generate and save to `_posts`.
+
+4. Or run the Streamlit app:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Streamlit will print a local URL, usually http://localhost:8501.
